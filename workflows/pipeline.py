@@ -659,13 +659,13 @@ def plot_four_panel(
         (
             simp_objects,
             simp_arcs,
-            f"Simplified  (seg={_fmt(segment_length)} km)",
+            f"Simplified  (min-area={_fmt(min_area)} km²,  seg={_fmt(segment_length)} km)",
             "simplified",
         ),
         (
             oct_objects,
             oct_arcs,
-            f"Snapped  (angle={_fmt(angle_step)}°)",
+            f"Snapped  (min-area={_fmt(min_area)} km²,  seg={_fmt(segment_length)} km,  angle={_fmt(angle_step)}°)",
             "octilinear",
         ),
     ]
