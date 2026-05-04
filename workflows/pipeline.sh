@@ -18,4 +18,7 @@ python3 "$SCRIPT" data/original/districts.topojson \
     --segment-length 89 --min-area 200 --angle-step 45
 
 python3 "$SCRIPT" data/original/districts.topojson \
+    --segment-length 89 --min-area 200 --angle-step 60
+
+python3 "$SCRIPT" data/original/districts.topojson \
     --segment-length 89 --min-area 200 --angle-step 90

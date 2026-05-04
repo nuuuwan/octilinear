@@ -4,7 +4,7 @@ A Python pipeline that converts Sri Lanka's administrative boundary TopoJSON fil
 
 Think Harry Beck's London Underground map, applied to administrative boundaries. Regions become clean, readable polygons whose shape, position, and neighbours are preserved, even if their exact area and coastline are not. The result is far more useful than a raw geographic map for displaying statistical data by region.
 
-![Districts](images/octilinear/districts.min-area-200.seg-0.8.angle-45/all.png)
+![Districts](images/octilinear/districts.min-area-200.seg-89.angle-45/all.png)
 
 ---
 
@@ -68,25 +68,28 @@ Colors use a greedy 4-coloring seeded from the Sri Lankan flag palette (maroon, 
 
 ### Provinces
 
-![Provinces](images/octilinear/provinces.min-area-200.seg-0.8.angle-45/all.png)
+![Provinces](images/octilinear/provinces.min-area-200.seg-89.angle-45/all.png)
 
 ---
 
 ### Districts
 
-![Districts](images/octilinear/districts.min-area-200.seg-0.8.angle-45/all.png)
+![Districts](images/octilinear/districts.min-area-200.seg-89.angle-45/all.png)
 
 ---
 
-### Octilinear vs rectilinear
+### Octilinear vs hexilinear vs rectilinear
 
 The `--angle-step` controls how many directions are allowed. Fewer directions produce blockier, more diagrammatic shapes.
 
 **45° — octilinear (8 directions, default)**
-![45](images/octilinear/districts.min-area-200.seg-0.8.angle-45/octilinear.png)
+![45](images/octilinear/districts.min-area-200.seg-89.angle-45/octilinear.png)
+
+**60° — hexilinear (6 directions)**
+![60](images/octilinear/districts.min-area-200.seg-89.angle-60/octilinear.png)
 
 **90° — rectilinear (4 directions)**
-![90](images/octilinear/districts.min-area-200.seg-0.8.angle-90/octilinear.png)
+![90](images/octilinear/districts.min-area-200.seg-89.angle-90/octilinear.png)
 
 ---
 
