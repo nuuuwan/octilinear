@@ -4,7 +4,7 @@ A Python pipeline that converts Sri Lanka's administrative boundary TopoJSON fil
 
 Think Harry Beck's London Underground map, applied to administrative boundaries. Regions become clean, readable polygons whose shape, position, and neighbours are preserved, even if their exact area and coastline are not. The result is far more useful than a raw geographic map for displaying statistical data by region.
 
-![Districts](images/octilinear/districts.min-area-200.seg-89.angle-45/all.png)
+![Districts](images/octilinear/districts.min-area-200.seg-40.angle-45/all.png)
 
 ---
 
@@ -23,10 +23,12 @@ Three steps, applied in order:
 - **Snap** — insert an elbow point into each off-grid segment so both halves land on the angle grid. Output: `data/generate/octilinear/` and `images/octilinear/<stem>/`
 
 Each run produces five images inside its own folder:
+
 - `all.png` — 2×2 panel showing all four stages
 - `original.png`, `filtered.png`, `simplified.png`, `octilinear.png` — individual panels
 
 Output filenames encode all parameters so runs never overwrite each other:
+
 ```
 <base>.min-area-<v>.seg-<v>.angle-<v>
 ```
@@ -56,6 +58,7 @@ python workflows/pipeline.py [input ...] \
 - `--angle-step` — snapping grid in degrees, must divide 360 (default `45`). 45 = octilinear, 60 = hexilinear, 90 = rectilinear.
 
 To regenerate all images referenced in this README:
+
 ```bash
 bash workflows/pipeline.sh
 ```
@@ -68,13 +71,13 @@ Colors use a greedy 4-coloring seeded from the Sri Lankan flag palette (maroon, 
 
 ### Provinces
 
-![Provinces](images/octilinear/provinces.min-area-200.seg-89.angle-45/all.png)
+![Provinces](images/octilinear/provinces.min-area-200.seg-40.angle-45/all.png)
 
 ---
 
 ### Districts
 
-![Districts](images/octilinear/districts.min-area-200.seg-89.angle-45/all.png)
+![Districts](images/octilinear/districts.min-area-200.seg-40.angle-45/all.png)
 
 ---
 
@@ -83,13 +86,13 @@ Colors use a greedy 4-coloring seeded from the Sri Lankan flag palette (maroon, 
 The `--angle-step` controls how many directions are allowed. Fewer directions produce blockier, more diagrammatic shapes.
 
 **45° — octilinear (8 directions, default)**
-![45](images/octilinear/districts.min-area-200.seg-89.angle-45/octilinear.png)
+![45](images/octilinear/districts.min-area-200.seg-40.angle-45/octilinear.png)
 
 **60° — hexilinear (6 directions)**
-![60](images/octilinear/districts.min-area-200.seg-89.angle-60/octilinear.png)
+![60](images/octilinear/districts.min-area-200.seg-40.angle-60/octilinear.png)
 
 **90° — rectilinear (4 directions)**
-![90](images/octilinear/districts.min-area-200.seg-89.angle-90/octilinear.png)
+![90](images/octilinear/districts.min-area-200.seg-40.angle-90/octilinear.png)
 
 ---
 
