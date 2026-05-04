@@ -35,6 +35,7 @@ import json
 import math
 import os
 import random
+import subprocess
 import sys
 
 import matplotlib.collections as mc
@@ -896,6 +897,15 @@ def process_file(input_path, repo_root, segment_length, min_area, angle_step):
         min_area=min_area,
         segment_length=segment_length,
     )
+
+    # Open the octilinear panel image with the system viewer
+    octilinear_image = os.path.join(plot_path, "octilinear.png")
+    if sys.platform == "darwin":
+        subprocess.run(["open", octilinear_image])
+    elif sys.platform.startswith("linux"):
+        subprocess.run(["xdg-open", octilinear_image])
+    elif sys.platform == "win32":
+        os.startfile(octilinear_image)
 
 
 # ---------------------------------------------------------------------------
