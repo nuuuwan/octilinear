@@ -452,6 +452,82 @@ def filter_small_geometries(objects, arcs, min_area):
 # ---------------------------------------------------------------------------
 
 
+# Sri Lankan flag palette
+_LK_PALETTE = [
+    "#8D153A",  # maroon
+    "#FF7900",  # saffron
+    "#00534E",  # green
+    "#FFD100",  # gold
+]
+
+
+def _build_color_map(objects):
+    """
+    Greedy 4-colouring of features using the Sri Lankan flag palette so that
+    no two adjacent features (sharing a TopoJSON arc) get the same colour.
+    """
+    # Collect the set of arc indices each feature references.
+    feature_arcs = {}
+    for obj in objects.values():
+        for idx, geom in enumerate(obj.get("geometries", [])):
+            key = geom.get("id", idx)
+            used = set()
+            geo_type = geom.get("type")
+            if geo_type == "Polygon":
+                ring_groups = [geom.get("arcs", [])]
+            elif geo_type == "MultiPolygon":
+                ring_groups = geom.get("arcs", [])
+            else:
+                ring_groups = []
+            for poly in ring_groups:
+                for ring in poly:
+                    for a in ring:
+                        used.add(~a if a < 0 else a)
+            feature_arcs[key] = used
+
+    # arc index → list of feature keys that reference it
+    arc_features = {}
+    for key, arcs in feature_arcs.items():
+        for a in arcs:
+            arc_features.setdefault(a, []).append(key)
+
+    # Adjacency: two features sharing an arc are neighbours.
+    adj = {key: set() for key in feature_arcs}
+    for features in arc_features.values():
+        for i in range(len(features)):
+            for j in range(i + 1, len(features)):
+                adj[features[i]].add(features[j])
+                adj[features[j]].add(features[i])
+
+    # Greedy colouring — process most-constrained features first.
+    sorted_keys = sorted(feature_arcs, key=lambda k: -len(adj[k]))
+    color_map = {}
+    for key in sorted_keys:
+        neighbour_colors = {
+            color_map[nb] for nb in adj[key] if nb in color_map
+        }
+        for color in _LK_PALETTE:
+            if color not in neighbour_colors:
+                color_map[key] = color
+                break
+        else:
+            color_map[key] = _LK_PALETTE[
+                0
+            ]  # fallback (shouldn't happen for planar graphs)
+    return color_map
+
+
+def _render_to_axes(ax, objects, arcs, color_map, xlim, ylim, title):
+    """Render one map panel onto *ax*."""
+    for patch in _geom_patches(objects, arcs, color_map):
+        ax.add_patch(patch)
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+    ax.set_aspect("equal")
+    ax.set_title(title, fontsize=11)
+    ax.axis("off")
+
+
 def _geom_patches(objects, arcs, color_map):
     """
     Build a list of matplotlib PathPatch objects for all polygon geometries.
@@ -552,27 +628,16 @@ def plot_four_panel(
     segment_length=0.0,
 ):
     """
-    Save a 2×2 panel plot:
-      Original   | Filtered   (min_area)
-      Simplified (seg)  | Snapped (angle_step°)
-    All panels share the same bounding box derived from the original arcs.
-    """
-    all_keys = set()
-    for obj in orig_objects.values():
-        for idx, geom in enumerate(obj.get("geometries", [])):
-            all_keys.add(geom.get("id", idx))
+    Save a 2×2 combined panel plot and four individual panel images.
 
-    # Sri Lankan flag palette: maroon, saffron, green, gold
-    _LK_PALETTE = [
-        "#8D153A",  # maroon
-        "#FF7900",  # saffron
-        "#00534E",  # green
-        "#FFD100",  # gold
-    ]
-    sorted_keys = sorted(all_keys, key=str)
-    color_map = {
-        k: _LK_PALETTE[i % len(_LK_PALETTE)] for i, k in enumerate(sorted_keys)
-    }
+    2×2 layout:
+      Original        | Filtered   (min_area)
+      Simplified (seg)| Snapped    (angle_step°)
+
+    Individual images are saved alongside the combined one, named
+    <stem>.original.png, .filtered.png, .simplified.png, .snapped.png.
+    """
+    color_map = _build_color_map(orig_objects)
 
     all_xs = [pt[0] for arc in orig_arcs for pt in arc]
     all_ys = [pt[1] for arc in orig_arcs for pt in arc]
@@ -582,42 +647,51 @@ def plot_four_panel(
     def _fmt(v):
         return format(v, "g")
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 14))
     panels = [
-        (orig_objects, orig_arcs, axes[0, 0], "Original"),
+        (orig_objects, orig_arcs, "Original", "original"),
         (
             filt_objects,
             filt_arcs,
-            axes[0, 1],
             f"Filtered  (min-area={_fmt(min_area)} km²)",
+            "filtered",
         ),
         (
             simp_objects,
             simp_arcs,
-            axes[1, 0],
-            f"Simplified  (seg={_fmt(segment_length)}°)",
+            f"Simplified  (seg={_fmt(segment_length * _KM_PER_DEG)} km)",
+            "simplified",
         ),
         (
             oct_objects,
             oct_arcs,
-            axes[1, 1],
             f"Snapped  (angle={_fmt(angle_step)}°)",
+            "octilinear",
         ),
     ]
-    for objects, arcs, ax, title in panels:
-        for patch in _geom_patches(objects, arcs, color_map):
-            ax.add_patch(patch)
-        ax.set_xlim(xlim)
-        ax.set_ylim(ylim)
-        ax.set_aspect("equal")
-        ax.set_title(title)
-        ax.axis("off")
 
+    # Each pipeline run gets its own subfolder; files have short fixed names.
+    os.makedirs(plot_path, exist_ok=True)
+
+    # --- 2×2 combined image ---
+    fig, axes = plt.subplots(2, 2, figsize=(14, 14))
+    ax_grid = [axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]]
+    for (objects, arcs, title, _), ax in zip(panels, ax_grid):
+        _render_to_axes(ax, objects, arcs, color_map, xlim, ylim, title)
     fig.tight_layout()
-    os.makedirs(os.path.dirname(os.path.abspath(plot_path)), exist_ok=True)
-    plt.savefig(plot_path, dpi=150)
+    combined_path = os.path.join(plot_path, "all.png")
+    plt.savefig(combined_path, dpi=150)
     plt.close(fig)
-    print(f"Plot  : {plot_path}")
+    print(f"Plot  : {combined_path}")
+
+    # --- individual panel images ---
+    for objects, arcs, title, label in panels:
+        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+        _render_to_axes(ax, objects, arcs, color_map, xlim, ylim, title)
+        fig.tight_layout()
+        panel_path = os.path.join(plot_path, f"{label}.png")
+        plt.savefig(panel_path, dpi=150)
+        plt.close(fig)
+        print(f"Plot  : {panel_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -785,9 +859,8 @@ def process_file(input_path, repo_root, segment_length, min_area, angle_step):
     oct_path = os.path.join(
         repo_root, "data", "generate", "octilinear", oct_stem + ".topojson"
     )
-    plot_path = os.path.join(
-        repo_root, "images", "octilinear", oct_stem + ".png"
-    )
+    # plot_path is a directory; images/octilinear/<oct_stem>/
+    plot_path = os.path.join(repo_root, "images", "octilinear", oct_stem)
 
     print(f"\n=== {base} ===")
 
