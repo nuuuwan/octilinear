@@ -475,7 +475,7 @@ def _geom_patches(objects, arcs, color_map):
                 verts, codes = [], []
                 for ring in rings:
                     pts = _ring_points(ring, arcs)
-                    if len(pts) < 2:
+                    if len(pts) < 3:
                         continue
                     closed = pts + [pts[0]]
                     verts.extend(closed)
@@ -537,17 +537,21 @@ def plot_comparison(
     plt.close(fig)
 
 
-def plot_three_panel(
+def plot_four_panel(
     orig_objects,
     orig_arcs,
+    filt_objects,
+    filt_arcs,
     simp_objects,
     simp_arcs,
     oct_objects,
     oct_arcs,
     plot_path,
+    angle_step=45.0,
 ):
     """
-    Save a 3-panel plot: Original | Simplified | Octilinear.
+    Save a 4-panel plot:
+      Original | Filtered | Simplified | Snapped
     All panels share the same bounding box derived from the original arcs.
     """
     all_keys = set()
@@ -565,11 +569,13 @@ def plot_three_panel(
     xlim = (min(all_xs), max(all_xs))
     ylim = (min(all_ys), max(all_ys))
 
-    fig, axes = plt.subplots(1, 3, figsize=(21, 7))
+    fig, axes = plt.subplots(1, 4, figsize=(28, 7))
+    snap_label = f"Snapped ({angle_step}°)"
     panels = [
         (orig_objects, orig_arcs, axes[0], "Original"),
-        (simp_objects, simp_arcs, axes[1], "Simplified"),
-        (oct_objects, oct_arcs, axes[2], "Octilinear"),
+        (filt_objects, filt_arcs, axes[1], "Filtered"),
+        (simp_objects, simp_arcs, axes[2], "Simplified"),
+        (oct_objects, oct_arcs, axes[3], snap_label),
     ]
     for objects, arcs, ax, title in panels:
         for patch in _geom_patches(objects, arcs, color_map):
@@ -588,39 +594,69 @@ def plot_three_panel(
 
 
 # ---------------------------------------------------------------------------
-# Step 1 – Simplification
+# Step 1 – Filter small polygons
 # ---------------------------------------------------------------------------
 
 
-def simplify_topojson(input_path, output_path, segment_length, min_area=1.0):
+def filter_topojson(input_path, output_path, min_area):
+    """
+    Load *input_path*, remove every sub-polygon (including MultiPolygon
+    members) whose area in the **original** arcs is below *min_area* km²,
+    and write the result to *output_path*.
+
+    The output retains the original transform and arc data unchanged;
+    only the objects/geometries list is filtered.
+    """
+    with open(input_path) as fh:
+        topo = json.load(fh)
+
+    decoded = decode_arcs(topo["arcs"], topo.get("transform"))
+    objects = filter_small_geometries(topo["objects"], decoded, min_area)
+
+    new_topo = {**topo, "objects": objects}
+
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    with open(output_path, "w") as fh:
+        json.dump(new_topo, fh)
+
+    print(
+        f"[filter]   {os.path.basename(input_path)}: "
+        f"min_area={min_area} km²"
+    )
+    print(f"  Output: {output_path}")
+
+    return topo, decoded, objects
+
+
+# ---------------------------------------------------------------------------
+# Step 2 – Simplification
+# ---------------------------------------------------------------------------
+
+
+def simplify_topojson(input_path, output_path, segment_length):
     """
     Load *input_path*, resample every arc to ~*segment_length* chord length,
-    optionally filter small geometries, and write the result to *output_path*.
+    and write the result to *output_path*.
 
-    Filtering is performed on the **simplified** arcs, not the originals.
-    This means:
-      - Sub-polygons whose *simplified* outer ring has area < min_area are
-        dropped (correctly handles islands that become degenerate after
-        resampling, e.g. when the whole perimeter < segment_length).
-      - Each member of a MultiPolygon is tested individually, so small
-        islands are removed while the main body is kept.
+    Sub-polygons that become degenerate (area ≈ 0) after resampling are
+    dropped so that tiny features that survived the area filter but shrink
+    to nothing at the chosen segment length are still removed.
 
     The output uses absolute float coordinates (no transform).
     """
     with open(input_path) as fh:
         topo = json.load(fh)
 
-    transform = topo.get("transform")
-    decoded = decode_arcs(topo["arcs"], transform)
-
+    decoded = decode_arcs(topo["arcs"], topo.get("transform"))
     simplified_arcs = [simplify_arc(arc, segment_length) for arc in decoded]
 
-    objects = topo["objects"]
-    if min_area > 0.0:
-        # Filter using simplified arcs so that polygons whose perimeter is
-        # smaller than segment_length (degenerate after resampling) are
-        # also removed.
-        objects = filter_small_geometries(objects, simplified_arcs, min_area)
+    # Drop any polygon that collapsed to zero (or near-zero) area after
+    # resampling.  Using a small positive epsilon ensures that rings that
+    # simplify down to fewer than 3 points (area == 0 by the shoelace
+    # formula) are removed rather than carried as invisible ghost polygons.
+    objects = filter_small_geometries(
+        topo["objects"], simplified_arcs, min_area=1e-6
+    )
 
     new_topo = {
         "type": "Topology",
@@ -638,11 +674,12 @@ def simplify_topojson(input_path, output_path, segment_length, min_area=1.0):
     simp_segs = sum(len(a) - 1 for a in simplified_arcs)
     print(
         f"[simplify] {os.path.basename(input_path)}: "
-        f"{orig_segs} → {simp_segs} segments  (segment_length={segment_length})"
+        f"{orig_segs} → {simp_segs} segments  "
+        f"(segment_length={segment_length})"
     )
     print(f"  Output: {output_path}")
 
-    return topo, decoded, objects, simplified_arcs
+    return decoded, objects, simplified_arcs
 
 
 # ---------------------------------------------------------------------------
@@ -701,9 +738,10 @@ def octilinearize_topojson(input_path, output_path, angle_step=45.0):
 
 
 def process_file(input_path, repo_root, segment_length, min_area, angle_step):
-    """Run both pipeline steps for a single input TopoJSON file."""
+    """Run all pipeline steps for a single input TopoJSON file."""
     base = os.path.splitext(os.path.basename(input_path))[0]
 
+    filt_path = os.path.join(repo_root, "data", "filtered", base + ".topojson")
     simp_path = os.path.join(
         repo_root, "data", "simplified", base + ".topojson"
     )
@@ -714,25 +752,33 @@ def process_file(input_path, repo_root, segment_length, min_area, angle_step):
 
     print(f"\n=== {base} ===")
 
-    # Step 1
-    orig_topo, orig_decoded, simp_objects, simp_arcs = simplify_topojson(
-        input_path, simp_path, segment_length, min_area
+    # Step 1 – filter
+    orig_topo, orig_decoded, filt_objects = filter_topojson(
+        input_path, filt_path, min_area
     )
 
-    # Step 2
+    # Step 2 – simplify (reads filtered file)
+    filt_decoded, simp_objects, simp_arcs = simplify_topojson(
+        filt_path, simp_path, segment_length
+    )
+
+    # Step 3 – snap to angle grid
     _, oct_objects, oct_arcs = octilinearize_topojson(
         simp_path, oct_path, angle_step
     )
 
-    # 3-panel image
-    plot_three_panel(
+    # 4-panel image
+    plot_four_panel(
         orig_topo["objects"],
         orig_decoded,
+        filt_objects,
+        filt_decoded,
         simp_objects,
         simp_arcs,
         oct_objects,
         oct_arcs,
         plot_path,
+        angle_step=angle_step,
     )
 
 
