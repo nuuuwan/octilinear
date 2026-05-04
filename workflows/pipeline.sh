@@ -12,10 +12,10 @@ mkdir -p images/octilinear
 SCRIPT=workflows/pipeline.py
 
 python3 "$SCRIPT" data/original/provinces.topojson \
-    --segment-length 0.8 --min-area 200 --angle-step 45
+    --segment-length 89 --min-area 200 --angle-step 45
 
 python3 "$SCRIPT" data/original/districts.topojson \
-    --segment-length 0.8 --min-area 200 --angle-step 45
+    --segment-length 89 --min-area 200 --angle-step 45
 
 python3 "$SCRIPT" data/original/districts.topojson \
-    --segment-length 0.8 --min-area 200 --angle-step 90
+    --segment-length 89 --min-area 200 --angle-step 90

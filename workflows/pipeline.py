@@ -17,7 +17,7 @@ Images (3-panel: original | simplified | octilinear) are saved to
 images/octilinear/.
 
 Usage:
-    python workflows/pipeline.py [--segment-length DEG] [--min-area AREA]
+    python workflows/pipeline.py [--segment-length KM] [--min-area AREA]
                                   [input ...]
 
 Positional arguments:
@@ -25,7 +25,7 @@ Positional arguments:
                        *.topojson files under data/original/.
 
 Optional arguments:
-    --segment-length   Target arc-segment length in degrees.  Default: 0.02.
+    --segment-length   Target arc-segment length in km.  Default: 2.
     --min-area AREA    Remove polygons whose area (km²) is below this value.
                        Default: 100 000.
 """
@@ -658,7 +658,7 @@ def plot_four_panel(
         (
             simp_objects,
             simp_arcs,
-            f"Simplified  (seg={_fmt(segment_length * _KM_PER_DEG)} km)",
+            f"Simplified  (seg={_fmt(segment_length)} km)",
             "simplified",
         ),
         (
@@ -850,6 +850,8 @@ def process_file(input_path, repo_root, segment_length, min_area, angle_step):
     simp_stem = f"{filt_stem}.seg-{_fmt(segment_length)}"
     oct_stem = f"{simp_stem}.angle-{_fmt(angle_step)}"
 
+    segment_length_deg = segment_length / _KM_PER_DEG
+
     filt_path = os.path.join(
         repo_root, "data", "generate", "filtered", filt_stem + ".topojson"
     )
@@ -871,7 +873,7 @@ def process_file(input_path, repo_root, segment_length, min_area, angle_step):
 
     # Step 2 – simplify (reads filtered file)
     filt_decoded, simp_objects, simp_arcs = simplify_topojson(
-        filt_path, simp_path, segment_length
+        filt_path, simp_path, segment_length_deg
     )
 
     # Step 3 – snap to angle grid
@@ -916,11 +918,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--segment-length",
         type=float,
-        default=0.02,
-        metavar="DEG",
+        default=2.0,
+        metavar="KM",
         help=(
-            "Target arc-segment length in degrees for the simplification step. "
-            "Default: 0.02 (≈ 2 km)."
+            "Target arc-segment length in km for the simplification step. "
+            "Default: 2."
         ),
     )
     parser.add_argument(
