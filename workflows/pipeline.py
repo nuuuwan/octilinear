@@ -548,10 +548,13 @@ def plot_four_panel(
     oct_arcs,
     plot_path,
     angle_step=45.0,
+    min_area=0.0,
+    segment_length=0.0,
 ):
     """
-    Save a 4-panel plot:
-      Original | Filtered | Simplified | Snapped
+    Save a 2×2 panel plot:
+      Original   | Filtered   (min_area)
+      Simplified (seg)  | Snapped (angle_step°)
     All panels share the same bounding box derived from the original arcs.
     """
     all_keys = set()
@@ -559,9 +562,16 @@ def plot_four_panel(
         for idx, geom in enumerate(obj.get("geometries", [])):
             all_keys.add(geom.get("id", idx))
 
-    rng = random.Random(42)
+    # Sri Lankan flag palette: maroon, saffron, green, gold
+    _LK_PALETTE = [
+        "#8D153A",  # maroon
+        "#FF7900",  # saffron
+        "#00534E",  # green
+        "#FFD100",  # gold
+    ]
+    sorted_keys = sorted(all_keys, key=str)
     color_map = {
-        k: (rng.random(), rng.random(), rng.random()) for k in all_keys
+        k: _LK_PALETTE[i % len(_LK_PALETTE)] for i, k in enumerate(sorted_keys)
     }
 
     all_xs = [pt[0] for arc in orig_arcs for pt in arc]
@@ -569,13 +579,30 @@ def plot_four_panel(
     xlim = (min(all_xs), max(all_xs))
     ylim = (min(all_ys), max(all_ys))
 
-    fig, axes = plt.subplots(1, 4, figsize=(28, 7))
-    snap_label = f"Snapped ({angle_step}°)"
+    def _fmt(v):
+        return format(v, "g")
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 14))
     panels = [
-        (orig_objects, orig_arcs, axes[0], "Original"),
-        (filt_objects, filt_arcs, axes[1], "Filtered"),
-        (simp_objects, simp_arcs, axes[2], "Simplified"),
-        (oct_objects, oct_arcs, axes[3], snap_label),
+        (orig_objects, orig_arcs, axes[0, 0], "Original"),
+        (
+            filt_objects,
+            filt_arcs,
+            axes[0, 1],
+            f"Filtered  (min-area={_fmt(min_area)} km²)",
+        ),
+        (
+            simp_objects,
+            simp_arcs,
+            axes[1, 0],
+            f"Simplified  (seg={_fmt(segment_length)}°)",
+        ),
+        (
+            oct_objects,
+            oct_arcs,
+            axes[1, 1],
+            f"Snapped  (angle={_fmt(angle_step)}°)",
+        ),
     ]
     for objects, arcs, ax, title in panels:
         for patch in _geom_patches(objects, arcs, color_map):
@@ -741,14 +768,26 @@ def process_file(input_path, repo_root, segment_length, min_area, angle_step):
     """Run all pipeline steps for a single input TopoJSON file."""
     base = os.path.splitext(os.path.basename(input_path))[0]
 
-    filt_path = os.path.join(repo_root, "data", "filtered", base + ".topojson")
+    def _fmt(v):
+        """Format a float param value without trailing zeros."""
+        return format(v, "g")
+
+    filt_stem = f"{base}.min-area-{_fmt(min_area)}"
+    simp_stem = f"{filt_stem}.seg-{_fmt(segment_length)}"
+    oct_stem = f"{simp_stem}.angle-{_fmt(angle_step)}"
+
+    filt_path = os.path.join(
+        repo_root, "data", "generate", "filtered", filt_stem + ".topojson"
+    )
     simp_path = os.path.join(
-        repo_root, "data", "simplified", base + ".topojson"
+        repo_root, "data", "generate", "simplified", simp_stem + ".topojson"
     )
     oct_path = os.path.join(
-        repo_root, "data", "octilinear", base + ".topojson"
+        repo_root, "data", "generate", "octilinear", oct_stem + ".topojson"
     )
-    plot_path = os.path.join(repo_root, "images", "octilinear", base + ".png")
+    plot_path = os.path.join(
+        repo_root, "images", "octilinear", oct_stem + ".png"
+    )
 
     print(f"\n=== {base} ===")
 
@@ -779,6 +818,8 @@ def process_file(input_path, repo_root, segment_length, min_area, angle_step):
         oct_arcs,
         plot_path,
         angle_step=angle_step,
+        min_area=min_area,
+        segment_length=segment_length,
     )
 
 
